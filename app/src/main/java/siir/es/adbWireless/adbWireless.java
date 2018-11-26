@@ -70,19 +70,14 @@ public class adbWireless extends Activity {
 			Utils.mNotificationManager = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
 		}
 
-		if (!Utils.hasRootPermission()) {
-			AlertDialog.Builder builder = new AlertDialog.Builder(this);
-			builder.setMessage(getString(R.string.no_root)).setCancelable(true)
-					.setPositiveButton(getString(R.string.button_close), new DialogInterface.OnClickListener() {
-						public void onClick(DialogInterface dialog, int id) {
-							adbWireless.this.finish();
-						}
-					});
-			builder.setIcon(android.R.drawable.ic_dialog_alert);
-			builder.create();
-			builder.setTitle(R.string.no_root_title);
-			builder.show();
+		class CheckRoot implements Runnable {
+			Activity activity;
+			CheckRoot (Activity activity) { this.activity = activity; }
+			public void run() {
+				new RootUtil().new CheckRoot(activity).execute();
+			}
 		}
+		findViewById(R.id.scrollView1).post(new CheckRoot(this));
 
 		if (!Utils.checkWifiState(this)) {
 			wifiState = false;

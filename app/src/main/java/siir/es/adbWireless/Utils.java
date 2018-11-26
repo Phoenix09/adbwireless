@@ -21,6 +21,10 @@ package siir.es.adbWireless;
 import java.io.BufferedReader;
 import java.io.DataOutputStream;
 import java.io.InputStreamReader;
+import java.math.BigInteger;
+import java.net.InetAddress;
+import java.net.UnknownHostException;
+import java.nio.ByteOrder;
 
 import android.app.Activity;
 import android.app.AlertDialog;
@@ -38,7 +42,11 @@ import android.net.wifi.WifiManager;
 import android.os.PowerManager;
 import android.os.PowerManager.WakeLock;
 import android.preference.PreferenceManager;
+import android.text.format.Formatter;
+import android.util.Log;
 import android.widget.Toast;
+
+import eu.chainfire.libsuperuser.Shell;
 
 public class Utils {
 
@@ -80,17 +88,13 @@ public class Utils {
 			if (!adbWireless.USB_DEBUG) {
 				Utils.setProp("service.adb.tcp.port", adbWireless.PORT);
 				try {
-					if (Utils.isProcessRunning("adbd")) {
-						Utils.runRootCommand("stop adbd");
-					}
-				} catch (Exception e) {
-				}
+					Utils.runRootCommand("stop adbd");
+				} catch (Exception e) { }
 				Utils.runRootCommand("start adbd");
 			}
 			try {
 				adbWireless.mState = true;
-			} catch (Exception e) {
-			}
+			} catch (Exception e) { }
 			SharedPreferences settings = context.getSharedPreferences("wireless", 0);
 			SharedPreferences.Editor editor = settings.edit();
 			editor.putBoolean("mState", true);
@@ -179,82 +183,33 @@ public class Utils {
 
 	}
 
-	public static boolean isProcessRunning(String processName) throws Exception {
-		boolean running = false;
-		Process process = null;
-		process = Runtime.getRuntime().exec("ps");
-		BufferedReader in = new BufferedReader(new InputStreamReader(process.getInputStream()));
-		String line = null;
-		while ((line = in.readLine()) != null) {
-			if (line.contains(processName)) {
-				running = true;
-				break;
-			}
-		}
-		in.close();
-		process.waitFor();
-		return running;
-	}
-
 	public static boolean hasRootPermission() {
-		Process process = null;
-		DataOutputStream os = null;
-		boolean rooted = true;
-		try {
-			process = Runtime.getRuntime().exec("su");
-			os = new DataOutputStream(process.getOutputStream());
-			os.writeBytes("exit\n");
-			os.flush();
-			process.waitFor();
-			if (process.exitValue() != 0) {
-				rooted = false;
-			}
-		} catch (Exception e) {
-			rooted = false;
-		} finally {
-			if (os != null) {
-				try {
-					os.close();
-					process.destroy();
-				} catch (Exception e) {
-				}
-			}
-		}
-		return rooted;
+		return Shell.SU.available();
 	}
 
-	public static boolean runRootCommand(String command) {
-		Process process = null;
-		DataOutputStream os = null;
-		try {
-			process = Runtime.getRuntime().exec("su");
-			os = new DataOutputStream(process.getOutputStream());
-			os.writeBytes(command + "\n");
-			os.writeBytes("exit\n");
-			os.flush();
-			process.waitFor();
-		} catch (Exception e) {
-			return false;
-		} finally {
-			try {
-				if (os != null) {
-					os.close();
-				}
-				process.destroy();
-			} catch (Exception e) {
-			}
-		}
-		return true;
+	public static void runRootCommand(String command) {
+		new RootUtil().new Exec().execute(command);
 	}
 
-	public static boolean setProp(String property, String value) {
-		return runRootCommand("setprop " + property + " " + value);
+	public static void setProp(String property, String value) {
+		runRootCommand("setprop " + property + " " + value);
 	}
 
 	public static String getWifiIp(Context context) {
-		WifiManager mWifiManager = (WifiManager) context.getSystemService(Context.WIFI_SERVICE);
+		WifiManager mWifiManager = (WifiManager) context.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
 		int ip = mWifiManager.getConnectionInfo().getIpAddress();
-		return (ip & 0xFF) + "." + ((ip >> 8) & 0xFF) + "." + ((ip >> 16) & 0xFF) + "." + ((ip >> 24) & 0xFF);
+
+		if (ByteOrder.nativeOrder().equals(ByteOrder.LITTLE_ENDIAN)) {
+			ip = Integer.reverseBytes(ip);
+		}
+
+		byte[] ipByteArray = BigInteger.valueOf(ip).toByteArray();
+
+		try {
+			return InetAddress.getByAddress(ipByteArray).getHostAddress();
+		} catch (UnknownHostException ex) {
+			return null;
+		}
 	}
 
 	public static void enableWiFi(Context context, boolean enable) {
